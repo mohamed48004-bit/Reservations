@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة العيادة الذكي Pro - نسخة الفاتورة المطورة</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb; --secondary: #1e40af; --success: #16a34a;
+            --danger: #dc2626; --warning: #ca8a04; --dark: #0f172a; --light: #f8fafc;
+        }
+        * { box-sizing: border-box; font-family: 'Cairo', sans-serif; }
+        body { background-color: #f1f5f9; margin: 0; padding: 0; color: var(--dark); }
+        
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 15px; display: none; }
+        .app-header { background: white; padding: 25px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border-right: 6px solid var(--primary); }
+        
+        .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: white; padding: 15px; border-radius: 15px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.04); border-top: 4px solid var(--primary); }
+        .stat-card b { color: var(--primary); font-size: 20px; display: block; }
+        .stat-card small { color: #64748b; font-size: 12px; }
+
+        .card { background: white; border-radius: 20px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 25px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; border-radius: 10px; overflow: hidden; }
+        th { background: #f8fafc; padding: 15px; text-align: right; border-bottom: 2px solid #edf2f7; color: #64748b; }
+        td { padding: 15px; border-bottom: 1px solid #f1f5f9; }
+
+        .btn { border: none; padding: 10px 15px; border-radius: 10px; cursor: pointer; font-weight: 600; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; justify-content: center; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { border: 1px solid #e2e8f0; background: transparent; }
+        .btn-sm { padding: 5px 10px; font-size: 11px; }
+        
+        .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; border: 1px solid transparent; }
+        .status-waiting { background: #fffbeb; color: #92400e; border-color: #fef3c7; }
+        .status-done { background: #f0fdf4; color: #166534; border-color: #dcfce7; }
+
+        input, select, textarea { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; outline: none; transition: 0.2s; background: #fcfcfc; }
+        input:focus { border-color: var(--primary); background: white; }
+
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 999; backdrop-filter: blur(4px); }
+        .modal-content { background: white; padding: 30px; border-radius: 20px; width: 600px; max-width: 95%; position: relative; }
+
+        #loginOverlay { position: fixed; inset: 0; background: var(--dark); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .login-box { background: white; padding: 40px; border-radius: 25px; width: 350px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); }
+
+        #printArea { display: none; }
+        @media print {
+            @page { size: A5; margin: 10mm; }
+            body * { visibility: hidden; }
+            #printArea, #printArea * { visibility: visible; }
+            #printArea { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="loginOverlay">
+    <div class="login-box">
+        <div style="font-size: 50px; margin-bottom: 10px;">🏥</div>
+        <h2 style="color:var(--primary); margin-top:0">عيادة الشفاء</h2>
+        <input type="password" id="passInput" placeholder="رمز الدخول" style="text-align:center; font-size:24px; margin-bottom:20px;">
+        <button class="btn btn-primary" style="width:100%; padding:15px;" onclick="checkLogin()">دخول النظام</button>
+    </div>
+</div>
+
+<div class="container" id="mainApp">
+    <header class="app-header">
+        <div>
+            <h2 style="margin:0">د. أحمد محمد علي</h2>
+            <p style="margin:0; color:#64748b" id="currentDate"></p>
+        </div>
+        <div style="display:flex; gap:10px">
+            <button class="btn btn-outline" onclick="exportData()">📦 نسخة احتياطية</button>
+            <button class="btn btn-outline" style="color:var(--danger)" onclick="location.reload()">🔒 خروج</button>
+        </div>
+    </header>
+
+    <div class="stats-bar">
+        <div class="stat-card">📑 إجمالي الحالات<b id="statCount">0</b></div>
+        <div class="stat-card">⏳ قيد الانتظار<b id="statWaiting" style="color:var(--warning)">0</b></div>
+        <div class="stat-card">💰 صافي دخل اليوم<b id="statIncome">0</b><small>ج.م</small></div>
+        <div class="stat-card">🏛️ ضريبة اليوم<b id="statVat" style="color:var(--danger)">0</b><small>ج.م</small></div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top:0">➕ تسجيل مريض جديد</h3>
+        <div class="form-grid">
+            <input type="text" id="pName" placeholder="اسم المريض">
+            <input type="text" id="pPhone" placeholder="الهاتف">
+            <input type="number" id="pPrice" placeholder="السعر" value="300">
+            <select id="pType">
+                <option value="كشف جديد">كشف جديد</option>
+                <option value="استشارة">استشارة</option>
+                <option value="جلسة">جلسة</option>
+            </select>
+            <select id="pPayMethod">
+                <option value="Cash">نقدي (Cash)</option>
+                <option value="Visa">بطاقة (Visa)</option>
+            </select>
+            <button class="btn btn-primary" onclick="addPatient()">إضافة للحجز</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+            <h3 style="margin:0">📋 قائمة المراجعات اليومية</h3>
+            <input type="text" id="searchInp" placeholder="🔍 بحث بالاسم أو الهاتف..." style="width:300px" oninput="render()">
+        </div>
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>رقم الحجز</th>
+                        <th>التاريخ/الوقت</th>
+                        <th>المريض</th>
+                        <th>النوع</th>
+                        <th>الإجمالي (VAT)</th>
+                        <th>الحالة</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="patientTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="prescModal" class="modal">
+    <div class="modal-content">
+        <h3>📝 تفاصيل الحالة: <span id="targetPatient" style="color:var(--primary)"></span></h3>
+        <input type="text" id="diagInput" placeholder="التشخيص الطبي (اختياري)" style="margin-bottom:10px">
+        <textarea id="medsInput" placeholder="اكتب الأدوية هنا... مثال:&#10;1- Panadol 500mg (مرة كل 8 ساعات)" style="height:150px; margin-bottom:15px; font-size:16px"></textarea>
+        <div style="display:flex; gap:10px">
+            <button class="btn btn-primary" style="flex:2" onclick="doPrint('presc')">🖨️ طباعة الروشتة</button>
+            <button class="btn btn-outline" style="flex:1" onclick="closeModal()">إلغاء</button>
+        </div>
+    </div>
+</div>
+
+<div id="printArea"></div>
+
+<script>
+    const PASS = "0000";
+    const VAT_RATE = 0.14;
+    let patients = JSON.parse(localStorage.getItem('clinic_pro_v3')) || [];
+    let activeP = null;
+
+    document.getElementById('currentDate').innerText = new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    function checkLogin() {
+        if(document.getElementById('passInput').value === PASS) {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'block';
+            render();
+        } else { alert("رمز الدخول غير صحيح!"); }
+    }
+
+    function addPatient() {
+        const name = document.getElementById('pName').value;
+        const price = parseFloat(document.getElementById('pPrice').value);
+        if(!name || isNaN(price)) return alert("يرجى ملء الاسم والسعر");
+
+        const today = new Date().toLocaleDateString('en-GB');
+        // حساب رقم الحجز اليومي للمريض
+        const todayPatients = patients.filter(p => p.date === today);
+        const dailyNumber = todayPatients.length + 1;
+
+        const newPatient = {
+            id: Date.now(),
+            dailyNo: dailyNumber, // حفظ رقم المريض لهذا اليوم
+            name,
+            phone: document.getElementById('pPhone').value || '---',
+            price,
+            vat: price * VAT_RATE,
+            total: price * (1 + VAT_RATE),
+            method: document.getElementById('pPayMethod').value,
+            type: document.getElementById('pType').value,
+            status: 'waiting',
+            diagnosis: '',
+            meds: '',
+            date: today,
+            time: new Date().toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})
+        };
+
+        patients.push(newPatient);
+        save();
+        document.getElementById('pName').value = '';
+        document.getElementById('pPhone').value = '';
+    }
+
+    function render() {
+        const query = document.getElementById('searchInp').value.toLowerCase();
+        const table = document.getElementById('patientTable');
+        const today = new Date().toLocaleDateString('en-GB');
+        
+        table.innerHTML = '';
+        let stats = { income: 0, vat: 0, waiting: 0 };
+
+        // الترتيب من الأحدث للأقدم في العرض
+        patients.slice().reverse().forEach(p => {
+            if(p.name.toLowerCase().includes(query) || p.phone.includes(query)) {
+                if(p.date === today) {
+                    stats.income += p.price;
+                    stats.vat += p.vat;
+                    if(p.status === 'waiting') stats.waiting++;
+                }
+
+                table.innerHTML += `
+                <tr>
+                    <td><b style="color:var(--primary)">#${p.dailyNo || '-'}</b></td>
+                    <td>${p.date}<br><small>${p.time}</small></td>
+                    <td><b>${p.name}</b><br><small>${p.phone}</small></td>
+                    <td><span class="btn-outline btn-sm">${p.type}</span></td>
+                    <td><b>${p.total.toFixed(2)}</b></td>
+                    <td>
+                        <span onclick="toggleStatus(${p.id})" class="status-badge ${p.status === 'done' ? 'status-done' : 'status-waiting'}" style="cursor:pointer">
+                            ${p.status === 'done' ? '✅ اكتمل' : '⏳ انتظار'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-outline btn-sm" onclick="openPresc(${p.id})" title="روشتة">💊</button>
+                        <button class="btn btn-outline btn-sm" onclick="printInvoice(${p.id})" title="فاتورة">🧾</button>
+                        <button class="btn btn-outline btn-sm" style="color:red" onclick="deleteP(${p.id})" title="حذف">🗑️</button>
+                    </td>
+                </tr>`;
+            }
+        });
+
+        document.getElementById('statCount').innerText = patients.length;
+        document.getElementById('statWaiting').innerText = stats.waiting;
+        document.getElementById('statIncome').innerText = stats.income.toLocaleString();
+        document.getElementById('statVat').innerText = stats.vat.toLocaleString();
+    }
+
+    function toggleStatus(id) {
+        const p = patients.find(x => x.id === id);
+        p.status = p.status === 'waiting' ? 'done' : 'waiting';
+        save();
+    }
+
+    function openPresc(id) {
+        activeP = patients.find(x => x.id === id);
+        document.getElementById('targetPatient').innerText = activeP.name;
+        document.getElementById('diagInput').value = activeP.diagnosis || '';
+        document.getElementById('medsInput').value = activeP.meds || '';
+        document.getElementById('prescModal').style.display = 'flex';
+    }
+
+    function doPrint(type) {
+        if(type === 'presc') {
+            activeP.diagnosis = document.getElementById('diagInput').value;
+            activeP.meds = document.getElementById('medsInput').value;
+            save();
+
+            const medsList = activeP.meds.split('\n').map(m => `<li>${m}</li>`).join('');
+            const html = `
+                <div style="border-bottom:3px solid #2563eb; padding-bottom:10px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center">
+                    <div>
+                        <h1 style="color:#2563eb; margin:0">د. أحمد محمد علي</h1>
+                        <p style="margin:5px 0">استشاري جراحة العظام والمفاصل</p>
+                    </div>
+                    <div style="text-align:left; font-size:12px">تاريخ: ${activeP.date}<br>رقم الكشف: ${activeP.dailyNo}</div>
+                </div>
+                <div style="margin-bottom:15px"><b>اسم المريض:</b> ${activeP.name}</div>
+                ${activeP.diagnosis ? `<div style="background:#f1f5f9; padding:10px; border-radius:5px; margin-bottom:15px"><b>التشخيص:</b> ${activeP.diagnosis}</div>` : ''}
+                <div style="font-size:40px; font-weight:bold; color:#2563eb">Rx</div>
+                <ul style="font-size:18px; line-height:1.8; min-height:250px">${medsList}</ul>
+                <div style="margin-top:40px; border-top:1px solid #eee; padding-top:15px; display:flex; justify-content:space-between; font-size:11px">
+                    <span>العنوان: القاهرة - شارع التحرير | هاتف: 01000000000</span>
+                    <span style="text-align:center">توقيع الطبيب<br>__________</span>
+                </div>`;
+            document.getElementById('printArea').innerHTML = html;
+            window.print();
+        }
+        closeModal();
+    }
+
+    function printInvoice(id) {
+        const p = patients.find(x => x.id === id);
+        const html = `
+            <div style="text-align:center; border-bottom:1px solid #000; padding-bottom:10px; margin-bottom:15px">
+                <h2 style="margin-bottom:5px">عيادة الشفاء</h2>
+                <p style="margin:0">فاتورة ضريبية مبسطة</p>
+                <div style="display:inline-block; border:2px solid #000; padding:5px 15px; font-size:22px; font-weight:bold; margin-top:10px">
+                    رقم المريض: ${p.dailyNo || '1'}
+                </div>
+            </div>
+            <p><b>اسم المريض:</b> ${p.name}</p>
+            <p><b>التاريخ:</b> ${p.date} | ${p.time}</p>
+            <p><b>الرقم المرجعي:</b> ${p.id.toString().slice(-6)}</p>
+            <hr>
+            <table style="width:100%; text-align:right">
+                <tr><td>الخدمة:</td><td>${p.type}</td></tr>
+                <tr><td>السعر الصافي:</td><td>${p.price.toFixed(2)} ج.م</td></tr>
+                <tr><td>ضريبة القيمة المضافة (14%):</td><td>${p.vat.toFixed(2)} ج.م</td></tr>
+                <tr style="font-weight:bold; font-size:1.2em; border-top:1px solid #000">
+                    <td>الإجمالي النهائي:</td>
+                    <td>${p.total.toFixed(2)} ج.م</td>
+                </tr>
+            </table>
+            <hr>
+            <p style="margin-top:20px; font-size:12px; text-align:center">
+                طريقة الدفع: ${p.method === 'Cash' ? 'نقدي' : 'بطاقة (Visa)'}<br>
+                نتمنى لكم الشفاء العاجل
+            </p>`;
+        document.getElementById('printArea').innerHTML = html;
+        window.print();
+    }
+
+    function save() { localStorage.setItem('clinic_pro_v3', JSON.stringify(patients)); render(); }
+    function deleteP(id) { if(confirm('حذف هذا السجل؟')) { patients = patients.filter(x => x.id !== id); save(); } }
+    function closeModal() { document.getElementById('prescModal').style.display='none'; }
+    function exportData() {
+        const blob = new Blob([JSON.stringify(patients)], {type: "application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `backup_${new Date().toLocaleDateString()}.json`;
+        a.click();
+    }
+</script>
+</body>
+</html>
